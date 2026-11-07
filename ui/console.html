@@ -1,0 +1,411 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Graph console</title>
+<link rel="icon" href="data:,">
+<style>
+:root {
+  --bg: #f7f7f5; --panel: #ffffff; --text: #1d1d1b; --muted: #6b6b66; --line: #deddd8;
+  --accent: #2f5fd0; --accent-text: #ffffff; --error: #b3261e; --code: #f0efea;
+  --node: #2f5fd0; --node2: #c2571a; --node3: #2d8a4e; --node4: #8a3fb8; --node5: #b3261e; --node6: #0f7f8c; --edge: #9b9a94;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #161615; --panel: #1f1f1d; --text: #ecebe6; --muted: #a09f99; --line: #3a3a37;
+    --accent: #7ea2ff; --accent-text: #10131a; --error: #ff8a80; --code: #2a2a27;
+    --node: #7ea2ff; --node2: #f0955a; --node3: #6cc98e; --node4: #c38ef0; --node5: #ff8a80; --node6: #5cc9d6; --edge: #77766f;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #161615; --panel: #1f1f1d; --text: #ecebe6; --muted: #a09f99; --line: #3a3a37;
+  --accent: #7ea2ff; --accent-text: #10131a; --error: #ff8a80; --code: #2a2a27;
+  --node: #7ea2ff; --node2: #f0955a; --node3: #6cc98e; --node4: #c38ef0; --node5: #ff8a80; --node6: #5cc9d6; --edge: #77766f;
+}
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+body { margin: 0; background: var(--bg); color: var(--text); font: 14px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif; }
+header { display: flex; gap: 12px; align-items: center; padding: 10px 16px; border-bottom: 1px solid var(--line); background: var(--panel); flex-wrap: wrap; }
+header h1 { font-size: 16px; margin: 0 auto 0 0; }
+header input { width: 260px; max-width: 100%; }
+main { display: grid; grid-template-columns: 260px 1fr; min-height: calc(100vh - 52px); }
+aside { border-right: 1px solid var(--line); padding: 12px 16px; overflow: auto; background: var(--panel); }
+aside h2 { font-size: 12px; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); margin: 14px 0 6px; }
+aside ul { list-style: none; padding: 0; margin: 0; }
+aside li { padding: 3px 0; cursor: pointer; display: flex; justify-content: space-between; gap: 8px; }
+aside li:hover { color: var(--accent); }
+aside li small { color: var(--muted); }
+aside .props { color: var(--muted); font-size: 12px; margin: 0 0 4px 10px; cursor: default; }
+section { padding: 12px 16px; min-width: 0; }
+select { background: var(--panel); color: var(--text); border: 1px solid var(--line); border-radius: 4px; }
+textarea, input { font: 13px/1.4 ui-monospace, SFMono-Regular, Menlo, monospace; background: var(--panel); color: var(--text); border: 1px solid var(--line); border-radius: 6px; padding: 8px; }
+textarea { width: 100%; resize: vertical; }
+#query { min-height: 96px; }
+#params { min-height: 38px; }
+.row { display: flex; gap: 8px; align-items: center; margin: 8px 0; flex-wrap: wrap; }
+button { font: inherit; border: 1px solid var(--line); background: var(--panel); color: var(--text); border-radius: 6px; padding: 6px 12px; cursor: pointer; }
+button.primary { background: var(--accent); color: var(--accent-text); border-color: var(--accent); }
+button:disabled { opacity: .5; cursor: default; }
+.status { color: var(--muted); margin-left: auto; }
+.error { color: var(--error); white-space: pre-wrap; }
+.tabs { display: flex; gap: 4px; border-bottom: 1px solid var(--line); margin-top: 10px; }
+.tabs button { border: none; border-bottom: 2px solid transparent; border-radius: 0; background: none; }
+.tabs button.on { border-bottom-color: var(--accent); color: var(--accent); }
+.pane { display: none; padding-top: 10px; overflow: auto; }
+.pane.on { display: block; }
+table { border-collapse: collapse; width: 100%; font-size: 13px; }
+th, td { text-align: left; border-bottom: 1px solid var(--line); padding: 5px 8px; vertical-align: top; }
+th { color: var(--muted); font-weight: 600; position: sticky; top: 0; background: var(--bg); }
+td code, pre { background: var(--code); border-radius: 4px; }
+td code { padding: 1px 4px; font-size: 12px; }
+pre { padding: 10px; overflow: auto; font-size: 12px; margin: 0; }
+#stage { width: 100%; height: 560px; background: var(--panel); border: 1px solid var(--line); border-radius: 6px; overflow: hidden; position: relative; }
+#legend { display: flex; flex-wrap: wrap; gap: 4px 12px; margin: 8px 0; font-size: 12px; }
+#legend i { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-right: 4px; }
+#details { white-space: pre-wrap; margin-top: 8px; }
+.float-tooltip-kap { background: var(--code) !important; color: var(--text) !important; }
+.muted { color: var(--muted); }
+@media (max-width: 760px) {
+  main { grid-template-columns: 1fr; }
+  aside { border-right: none; border-bottom: 1px solid var(--line); max-height: 220px; }
+  header input { width: 100%; }
+}
+</style>
+</head>
+<body>
+<header>
+  <h1><span id="title">Graph console</span> <small class="muted">read-only</small></h1>
+  <input id="key" type="password" placeholder="API key (if the coordinator needs one)" autocomplete="off" aria-label="API key">
+  <button id="theme" title="Light or dark">◐</button>
+</header>
+<main>
+  <aside>
+    <div id="totals" class="muted">Loading the schema…</div>
+    <h2>Labels</h2><ul id="labels"></ul>
+    <h2 data-needs="schema">Vertex types</h2><ul id="vtypes"></ul>
+    <h2>Relationship types</h2><ul id="etypes"></ul>
+  </aside>
+  <section>
+    <textarea id="query" spellcheck="false" aria-label="Query">MATCH (n) RETURN labels(n)[0] AS type, count(n) AS n ORDER BY type</textarea>
+    <textarea id="params" spellcheck="false" aria-label="Parameters" placeholder='Parameters, as JSON: {"name": "Ann"}'></textarea>
+    <div class="row">
+      <button class="primary" id="run" title="Ctrl+Enter">Run</button>
+      <button id="profile" data-needs="profile">Profile</button>
+      <button id="explain">Explain</button>
+      <button id="cancel" data-needs="cancel" disabled>Cancel</button>
+      <label class="muted" data-needs="past"><input id="atload" type="number" min="0" placeholder="at load" style="width:90px"> as of a past load</label>
+      <span class="status" id="status"></span>
+    </div>
+    <div class="error" id="error"></div>
+    <div class="tabs" role="tablist">
+      <button class="on" data-pane="table">Table</button>
+      <button data-pane="g3d">3D</button>
+      <button data-pane="g2d">2D</button>
+      <button data-pane="raw">JSON</button>
+      <button data-pane="prof" data-needs="profile">Profile</button>
+    </div>
+    <div class="pane on" id="table"></div>
+    <div class="pane" id="graph">
+      <div class="row">
+        <label class="muted">Draw up to <select id="cap" aria-label="The most nodes to draw">
+          <option>100</option><option>500</option><option selected>1000</option><option>2000</option><option>5000</option><option>10000</option>
+        </select> nodes</label>
+        <button id="fetchall" hidden>Fetch more rows to draw</button>
+        <span class="status" id="graphnote"></span>
+      </div>
+      <div id="stage" role="img" aria-label="The nodes and relationships in the answer"></div>
+      <div id="legend"></div>
+      <pre id="details" hidden></pre>
+    </div>
+    <div class="pane" id="prof"><p class="muted">Profile a read to see its plan and every round of partition calls.</p></div>
+    <div class="pane" id="raw"><pre id="rawpre"></pre></div>
+    <div class="row"><button id="more" hidden>More rows</button></div>
+  </section>
+</main>
+<script>
+"use strict";
+const $ = (id) => document.getElementById(id);
+const PAGE = 500, TABLE_ROWS = 2000;
+let rows = [], columns = [], cursor = null, running = null;
+let current = "table", view = null, drawing = 0;        // the tab shown, the graph drawn in it, the latest draw
+let answer = null;                                      // the latest answer, for the JSON tab
+let features = {};                                      // what this server has (GET /console/config.json)
+
+function store(k, v) { try { if (v === undefined) return localStorage.getItem(k); localStorage.setItem(k, v); } catch (e) { return null; } }
+$("key").value = store("graph-ui.key") || "";
+$("key").addEventListener("change", () => { store("graph-ui.key", $("key").value); loadSchema(); });
+const savedTheme = store("graph-ui.theme"); if (savedTheme) document.documentElement.dataset.theme = savedTheme;
+$("theme").onclick = () => {
+  const dark = matchMedia("(prefers-color-scheme: dark)").matches;
+  const now = document.documentElement.dataset.theme || (dark ? "dark" : "light");
+  document.documentElement.dataset.theme = now === "dark" ? "light" : "dark";
+  store("graph-ui.theme", document.documentElement.dataset.theme);
+  if (current === "g3d" || current === "g2d") draw(current);
+};
+
+function headers(extra) {
+  const h = Object.assign({"Content-Type": "application/json"}, extra || {});
+  if ($("key").value) h["X-API-Key"] = $("key").value;
+  return h;
+}
+async function call(method, path, body, extra) {
+  const r = await fetch(path, {method, headers: headers(extra), body: body === undefined ? undefined : JSON.stringify(body)});
+  const text = await r.text();
+  let data; try { data = JSON.parse(text); } catch (e) { data = {error: text}; }
+  if (!r.ok) throw new Error(`${r.status}: ${data.error || JSON.stringify(data)}`);
+  return data;
+}
+function esc(s) { return String(s).replace(/[&<>"]/g, (c) => ({"&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;"}[c])); }
+
+function schemaItem(name, count, q, props) {
+  const li = document.createElement("li");
+  li.innerHTML = `<span>${esc(name)}</span>` + (count === undefined ? "" : `<small>${count.toLocaleString()}</small>`);
+  li.onclick = () => { $("query").value = q; run(); };
+  const frag = document.createDocumentFragment(); frag.append(li);
+  if (props && props.length) { const p = document.createElement("div"); p.className = "props";
+    p.textContent = props.map((f) => `${f.name}: ${f.type}`).join(", "); frag.append(p); }
+  return frag;
+}
+const nodesQuery = (name) => `MATCH (n:\`${name}\`) RETURN n LIMIT 25`;
+const relsQuery = (name) => `MATCH (a)-[r:\`${name}\`]->(b) RETURN a, r, b LIMIT 25`;
+async function loadSchema() {
+  try {
+    if (features.schema) {
+      const s = await call("GET", "/schema");
+      $("totals").textContent = `${s.vertices.toLocaleString()} vertices, ${s.edges.toLocaleString()} edges, load ${s.load}`;
+      $("labels").replaceChildren(...s.labels.map((l) => schemaItem(l.name, l.count, nodesQuery(l.name))));
+      $("vtypes").replaceChildren(...s.vertex_types.map((t) => schemaItem(t.name, t.count, nodesQuery(t.name), t.properties)));
+      $("etypes").replaceChildren(...s.edge_types.map((t) => schemaItem(t.name, t.count, relsQuery(t.name), t.properties)));
+      return;
+    }
+    const names = async (procedure, field) => (await call("POST", "/opencypher",
+      {query: `CALL ${procedure}() YIELD ${field} RETURN ${field}`, read_only: true})).rows.map((r) => r[field]);
+    const [labels, types] = await Promise.all([names("db.labels", "label"), names("db.relationshipTypes", "relationshipType")]);
+    $("totals").textContent = "Labels and relationship types";
+    $("labels").replaceChildren(...labels.map((l) => schemaItem(l, undefined, nodesQuery(l))));
+    $("etypes").replaceChildren(...types.map((t) => schemaItem(t, undefined, relsQuery(t))));
+  } catch (e) { $("totals").textContent = "The schema: " + e.message; }
+}
+
+function parseParams() {
+  const t = $("params").value.trim();
+  if (!t) return {};
+  return JSON.parse(t);
+}
+
+async function run(mode) {
+  $("error").textContent = ""; $("more").hidden = true;
+  let params; try { params = parseParams(); } catch (e) { $("error").textContent = "Parameters: " + e.message; return; }
+  let query = $("query").value;
+  if (mode === "explain") query = "EXPLAIN " + query;
+  const id = "console-" + Math.random().toString(16).slice(2, 10);
+  const body = {query, params, read_only: true};
+  if (features.pages) body.page_size = PAGE;
+  if (features.profile && mode === "profile") body.profile = true;
+  if (features.past && $("atload").value !== "") body.at_load = Number($("atload").value);
+  running = id; $("cancel").disabled = false; $("status").textContent = "Running…";
+  const t0 = performance.now();
+  try {
+    const out = await call("POST", "/opencypher", body, {"X-Request-ID": id});
+    columns = out.columns; rows = out.rows; cursor = out.cursor;
+    const s = out.stats;
+    $("status").textContent = `${(performance.now() - t0).toFixed(0)} ms` +
+      (s && s.rounds !== undefined ? `, ${s.rounds} rounds, ${s.calls} calls` : "") + (cursor ? ", more rows" : `, ${rows.length} rows`);
+    render(out);
+    if (out.profile) { showProfile(out.profile); tab("prof"); }
+  } catch (e) { $("error").textContent = e.message; $("status").textContent = ""; }
+  finally { running = null; $("cancel").disabled = true; }
+}
+$("run").onclick = () => run();
+$("profile").onclick = () => run("profile");
+$("explain").onclick = () => run("explain");
+$("cancel").onclick = async () => { if (running) { try { await call("DELETE", "/queries/" + running); } catch (e) { $("error").textContent = e.message; } } };
+$("query").addEventListener("keydown", (e) => { if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) { e.preventDefault(); run(); } });
+$("more").onclick = async () => {
+  try { const p = await call("GET", `/opencypher/cursors/${encodeURIComponent(cursor)}`); rows = rows.concat(p.rows); cursor = p.cursor; render({columns, rows}); }
+  catch (e) { $("error").textContent = e.message; }
+};
+
+function cell(v) {
+  if (v === null || v === undefined) return '<span class="muted">null</span>';
+  if (typeof v === "object") {
+    if (v.labels && v.properties) return `<code>(:${esc(v.labels.join(":"))})</code> ${esc(JSON.stringify(v.properties))}`;
+    if (v.type && v.start && v.end) return `<code>[:${esc(v.type)}]</code> ${esc(JSON.stringify(v.properties || {}))}`;
+    if (v.nodes && v.relationships) return `<code>path, ${v.relationships.length} hops</code>`;
+    return `<code>${esc(JSON.stringify(v))}</code>`;
+  }
+  return esc(v);
+}
+function render(out) {
+  const shown = rows.slice(0, TABLE_ROWS);
+  $("table").innerHTML = rows.length ? `<table><thead><tr>${columns.map((c) => `<th>${esc(c)}</th>`).join("")}</tr></thead><tbody>` +
+    shown.map((r) => `<tr>${columns.map((c) => `<td>${cell(r[c])}</td>`).join("")}</tr>`).join("") + "</tbody></table>" +
+    (rows.length > shown.length ? `<p class="muted">Showing the first ${shown.length} of ${rows.length} rows here.</p>` : "")
+    : '<p class="muted">No rows.</p>';
+  answer = out;
+  if (current === "raw") showJson();
+  $("more").hidden = !cursor;
+  if (current === "g3d" || current === "g2d") draw(current);
+}
+function showJson() {                                   // only when opened: a large answer takes a while
+  const text = JSON.stringify(answer, null, 2);
+  $("rawpre").textContent = text && text.length > 5e6 ? text.slice(0, 5e6) + "\n... (cut at 5 MB)" : text || "";
+}
+function showProfile(p) {
+  const r = p.rounds.map((x) => `<tr><td>${x.round}</td><td>${esc(x.call.join(", "))}</td><td>${esc(x.partitions.join(", "))}</td><td>${x.sent}</td><td>${x.received}</td><td>${(x.seconds * 1000).toFixed(1)}</td></tr>`).join("");
+  $("prof").innerHTML = `<p>${(p.seconds.total * 1000).toFixed(1)} ms in all: ${(p.seconds.partitions * 1000).toFixed(1)} ms waiting for the partitions, ${(p.seconds.coordinator * 1000).toFixed(1)} ms at the coordinator.</p>` +
+    `<pre>${esc(p.plan.join("\n"))}</pre><table><thead><tr><th>Round</th><th>Call</th><th>Partitions</th><th>Sent</th><th>Received</th><th>ms</th></tr></thead><tbody>${r}</tbody></table>`;
+}
+
+// -- the graph views -------------------------------------------------------------------------- //
+const LIB = {g3d: ["3d-force-graph.min.js", "ForceGraph3D"], g2d: ["force-graph.min.js", "ForceGraph"]};
+const loading = {};
+function library(kind) {                                // loaded only when a graph is first opened
+  const [file, name] = LIB[kind];
+  if (window[name]) return Promise.resolve(window[name]);
+  return loading[file] || (loading[file] = new Promise((done, fail) => {
+    const tag = document.createElement("script");
+    tag.src = "/console/vendor/" + file;
+    tag.onload = () => done(window[name]);
+    tag.onerror = () => { delete loading[file]; fail(new Error("could not load " + file)); };
+    document.head.append(tag);
+  }));
+}
+function hasWebGL() {
+  try { const c = document.createElement("canvas"); return !!(c.getContext("webgl2") || c.getContext("webgl")); }
+  catch (e) { return false; }
+}
+function collect(cap) {
+  const nodes = new Map(), rels = new Map();
+  const walk = (v) => {
+    if (!v || typeof v !== "object") return;
+    if (Array.isArray(v)) { v.forEach(walk); return; }
+    if (v.labels && v.properties && v.id) nodes.set(v.id, v);
+    else if (v.type && v.start && v.end && v.id) rels.set(v.id, v);
+    else if (v.nodes && v.relationships) { v.nodes.forEach(walk); v.relationships.forEach(walk); }
+    else Object.values(v).forEach(walk);
+  };
+  rows.forEach((r) => Object.values(r).forEach(walk));
+  // a relationship's ends that the answer didn't return are drawn as placeholders
+  const total = new Set(nodes.keys());
+  let missing = 0;
+  for (const r of rels.values()) for (const end of [r.start, r.end]) if (!total.has(end)) { total.add(end); missing++; }
+  const kept = new Map();
+  for (const n of nodes.values()) { if (kept.size >= cap) break; kept.set(n.id, n); }
+  for (const r of rels.values()) for (const end of [r.start, r.end]) {
+    if (kept.size >= cap) break;
+    if (!kept.has(end)) kept.set(end, null);
+  }
+  const links = [...rels.values()].filter((r) => kept.has(r.start) && kept.has(r.end));
+  return {kept, links, totalNodes: total.size, totalRels: rels.size, missing};
+}
+function tokens() {
+  const css = getComputedStyle(document.documentElement), get = (k) => css.getPropertyValue(k).trim();
+  return {panel: get("--panel"), edge: get("--edge"), muted: get("--muted"),
+          nodes: ["--node", "--node2", "--node3", "--node4", "--node5", "--node6"].map(get)};
+}
+function closeView() {
+  if (view) { try { view._destructor(); } catch (e) { /* it may never have started */ } view = null; }
+  $("stage").replaceChildren();
+}
+function title(n) {
+  if (!n.data) return "(not in the answer) " + n.id;
+  const p = n.data.properties;
+  return `${n.data.labels.join(":")} ${p.name ?? p.title ?? ""}`.trim();
+}
+function showDetails(n) {
+  const d = $("details");
+  d.hidden = false;
+  d.textContent = JSON.stringify(n.data || {id: n.id, note: "A relationship's end that the answer didn't return"}, null, 2);
+}
+async function draw(kind) {
+  const me = ++drawing;                                 // a later draw replaces this one
+  closeView();
+  delete $("stage").dataset.laidOut;
+  const cap = Number($("cap").value), {kept, links, totalNodes, totalRels, missing} = collect(cap);
+  $("details").hidden = true;
+  $("legend").replaceChildren();
+  $("fetchall").hidden = !cursor || rows.length >= cap * 10;
+  if (!kept.size) { $("graphnote").textContent = "No nodes in the answer: return nodes, relationships or paths to see them here."; return; }
+  if (kind === "g3d" && !hasWebGL()) { $("graphnote").textContent = "This browser has no WebGL, which 3D needs: use 2D."; return; }
+  const theme = tokens(), colours = new Map();
+  const colour = (label) => { if (!colours.has(label)) colours.set(label, theme.nodes[colours.size % theme.nodes.length]); return colours.get(label); };
+  const data = {
+    nodes: [...kept].map(([id, n]) => ({id, data: n, color: n ? colour(n.labels[0] || "") : theme.muted})),
+    links: links.map((r) => ({source: r.start, target: r.end, type: r.type})),
+  };
+  const n = data.nodes.length, big = n > 1000;
+  $("graphnote").textContent = "Loading the graph library…";
+  let Graph;
+  try { Graph = await library(kind); }
+  catch (e) { $("graphnote").textContent = e.message; return; }
+  if (me !== drawing || current !== kind) return;      // the tab or the answer changed while it loaded
+  const stage = $("stage"), t0 = performance.now();
+  // measured (README.md#how-big-a-graph): past these, the picture stops saying anything
+  const advice = kind === "g3d" && n > 2000 ? " 3D is slow at this size: try 2D, or narrow the query." :
+    n > 500 ? " A graph this size is hard to read: narrow the query (labels, properties, LIMIT)." : "";
+  const say = (extra) => {
+    $("graphnote").textContent = `${n} of ${totalNodes} nodes, ${links.length} of ${totalRels} relationships` +
+      (missing ? `, ${missing} ends not in the answer` : "") + (cursor ? ", more rows not fetched" : "") +
+      (extra ? `. ${extra}` : "") + advice;
+  };
+  say("Laying it out…");
+  view = new Graph(stage).width(stage.clientWidth).height(stage.clientHeight)
+    .backgroundColor(theme.panel).nodeId("id").nodeColor("color").nodeVal(1)
+    .nodeLabel((x) => esc(title(x))).linkLabel((x) => esc(x.type)).linkColor(() => theme.edge)
+    .linkDirectionalArrowLength(big ? 0 : 3).linkDirectionalArrowRelPos(1)
+    .cooldownTicks(big ? 120 : 300).onNodeClick(showDetails);
+  if (kind === "g3d") view.showNavInfo(false).nodeResolution(big ? 4 : 8).linkOpacity(big ? 0.25 : 0.5);
+  const drawn = view;
+  view.onEngineStop(() => {
+    if (view !== drawn) return;
+    stage.dataset.laidOut = ((performance.now() - t0) / 1000).toFixed(2);
+    say(`Laid out in ${stage.dataset.laidOut} s`);
+    view.zoomToFit(400, 30);
+  });
+  view.graphData(data);
+  for (const [label, c] of colours) {
+    const item = document.createElement("span"), dot = document.createElement("i");
+    dot.style.background = c;
+    item.append(dot, label || "(no label)");
+    $("legend").append(item);
+  }
+}
+$("cap").onchange = () => { if (current === "g3d" || current === "g2d") draw(current); };
+$("fetchall").onclick = async () => {
+  const cap = Number($("cap").value);
+  $("fetchall").disabled = true;
+  try {
+    while (cursor && rows.length < cap * 10) {          // enough for the nodes and most of their relationships
+      const p = await call("GET", `/opencypher/cursors/${encodeURIComponent(cursor)}?page_size=5000`);
+      rows = rows.concat(p.rows); cursor = p.cursor;
+    }
+    render({columns, rows});
+  } catch (e) { $("error").textContent = e.message; }
+  finally { $("fetchall").disabled = false; }
+};
+window.addEventListener("resize", () => { if (view) { const s = $("stage"); view.width(s.clientWidth).height(s.clientHeight); } });
+
+function tab(name) {
+  current = name;
+  const graph = name === "g3d" || name === "g2d";
+  document.querySelectorAll(".tabs button").forEach((b) => b.classList.toggle("on", b.dataset.pane === name));
+  document.querySelectorAll(".pane").forEach((p) => p.classList.toggle("on", p.id === (graph ? "graph" : name)));
+  if (graph) draw(name); else { drawing++; closeView(); }   // a graph left running would use the GPU for nothing
+  if (name === "raw") showJson();
+}
+document.querySelectorAll(".tabs button").forEach((b) => (b.onclick = () => tab(b.dataset.pane)));
+async function start() {
+  try {
+    const r = await fetch("/console/config.json");
+    if (r.ok) features = await r.json();
+  } catch (e) { /* no config: the plain page */ }
+  if (features.title) { document.title = features.title; $("title").textContent = features.title; }
+  document.querySelectorAll("[data-needs]").forEach((el) => { el.hidden = !features[el.dataset.needs]; });
+  loadSchema();
+}
+start();
+</script>
+</body>
+</html>

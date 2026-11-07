@@ -1,0 +1,8 @@
+THIRD-PARTY NAMES AND LICENCES
+==============================
+
+3d-force-graph and force-graph (ui/vendor, MIT; 3d-force-graph bundles three.js, MIT)
+All rights lie with the respective copyright and trademark owners: Vasco Asturiano, and the three.js authors.
+
+openCypher
+All rights lie with the respective copyright and trademark owners.

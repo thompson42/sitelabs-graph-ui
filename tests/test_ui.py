@@ -20,6 +20,7 @@ The browser tests need Playwright, and skip without it:
 """
 import http.server
 import json
+import os
 import sys
 import threading
 import time
@@ -121,14 +122,24 @@ def until(page, expression, seconds=60):
         page.wait_for_timeout(50)
 
 
+def no_browser(reason: str):
+    """Skip, unless CI asked for the browser (REQUIRE_BROWSER=1), where a skip would hide a broken setup."""
+    if os.environ.get("REQUIRE_BROWSER") == "1":
+        pytest.fail(f"{reason} (and REQUIRE_BROWSER=1)", pytrace=False)
+    pytest.skip(reason)
+
+
 @pytest.fixture(scope="module")
 def browser():
-    api = pytest.importorskip("playwright.sync_api", reason="Playwright is not installed")
+    try:
+        from playwright import sync_api as api
+    except ImportError:
+        no_browser("Playwright is not installed")
     with api.sync_playwright() as pw:
         try:
             b = pw.chromium.launch()
         except api.Error as ex:
-            pytest.skip(f"no browser: {str(ex)[:80]}")
+            no_browser(f"no browser: {str(ex)[:80]}")
         yield b
         b.close()
 

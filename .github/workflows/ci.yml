@@ -1,0 +1,27 @@
+# Continuous integration: the page in a real browser, against a stand-in server, and the install.
+name: CI
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  tests:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install the tests' tools and a browser
+        run: |
+          pip install pytest==8.4.2 playwright==1.64.1
+          playwright install --with-deps chromium
+      - name: Run the tests
+        env:
+          REQUIRE_BROWSER: "1"          # a missing browser fails the run instead of skipping those tests
+        run: python -m pytest -ra

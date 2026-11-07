@@ -93,8 +93,9 @@ python -m pytest
 ```
 
 [`tests/test_ui.py`](tests/test_ui.py) runs the page in a real browser against a stand-in server, once
-with every feature and once with none. Without Playwright, only the install is tested. Each project also
-tests the page against itself.
+with every feature and once with none. Without Playwright, only the install is tested; CI (on every push
+and pull request) installs it and sets `REQUIRE_BROWSER=1`, which turns that skip into a failure. Each
+project also tests the page against itself.
 
 ## Licence
 

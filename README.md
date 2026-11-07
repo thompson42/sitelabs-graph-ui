@@ -8,16 +8,26 @@ and [sitelabs-partitioned-graph](https://github.com/thompson42/sitelabs-partitio
 > project uses it, what a server must provide, how big a graph is worth drawing, and how to test it.
 
 It is one page and two libraries, with nothing to build and nothing fetched from the internet, so it
-works on a private network.
+works on a private network. The query box's highlighting and completion are its own, about 100 lines:
+the usual editor libraries' language modes use a bare name for the language that both projects refuse.
 
 ## What it does
 
 * **Queries** with parameters, in a box. Every query goes with `"read_only": true`, so the server
   refuses a write, whatever the key may do. **Explain** puts `EXPLAIN` before the query.
+* **The query box** colours the language, completes keywords as you type and labels and types after a
+  `:` (Tab or Enter to accept), and marks where a syntax error is. Tab indents; Escape, then Tab, leaves
+  the box. Ctrl+Enter or ⌘+Enter runs.
+* **History:** the last 50 queries, in this browser, newest first. Click one to load it. Their text
+  only, not their parameters, which may be private. **Clear** forgets them.
 * **The answer** as a table (the first 2,000 rows), in 3D, in 2D, or as JSON.
 * **The graph views:** the nodes, relationships and paths in the answer, coloured by first label. Hover
   for a label, click a node for everything about it. A relationship whose ends the answer didn't
   return gets grey placeholders. Everything from the graph is escaped before it is shown.
+* **Expanding:** click a node, then **Expand neighbours**, to add what it connects to (its first 100
+  relationships), and carry on from there: the way to explore a graph too big to draw. What was
+  expanded stays when you switch between 3D and 2D, is drawn whatever the size limit, and goes with the
+  next query or **Back to the answer**. It sends `MATCH (a)-[r]-(b) WHERE id(a) = $id RETURN a, r, b`.
 * **Labels and types** beside the query: click one to see some of them.
 * **What a server has beyond that** shows only there: counts and properties (`schema`), paging (`pages`),
   profiles (`profile`), reading the past (`past`) and cancelling (`cancel`).
@@ -46,6 +56,8 @@ Each is about 30 lines in the projects' `app/routers/console.py`.
 | `GET /console/vendor/<file>` | `ui/vendor/3d-force-graph.min.js` and `force-graph.min.js`, and no other file |
 | `POST /opencypher` | `{"query", "params", "read_only"}` answers `{"columns", "rows", "stats"}`, or `{"error"}`. With `read_only`, a write answers 400. `X-API-Key` is the key. A node is `{"id", "labels", "properties"}`, a relationship `{"id", "type", "start", "end", "properties"}`, a path `{"nodes", "relationships"}` |
 | `CALL db.labels()`, `CALL db.relationshipTypes()` | Without `schema`, the page lists labels and types with these |
+| `id(a) = $id` in a `WHERE` | Expanding finds a node by it |
+| `offset N` in a syntax error's message | Optional: where the page marks the error |
 
 With `schema`: `GET /schema`. With `pages`: `page_size` in the request, `cursor` in the answer, and `GET
 /opencypher/cursors/{cursor}`. With `profile`: `profile` in the request and answer. With `past`:
@@ -69,8 +81,9 @@ Apple M2 laptop (Chrome, its GPU) on connected data of about 8 relationships per
 | 5,212, 40,198 | 3D | 15.4 s | 5 fps | 7 fps | No: a solid disc |
 | | 2D | 3.5 s | 36 fps | 55 fps | No: a solid disc |
 
-Focused answers read well in either view, at any size of graph. So the limit starts at 1,000 nodes, and
-the page says when a graph is too big to read, or too big for 3D.
+Focused answers read well in either view, at any size of graph. So the limit starts at 1,000 nodes, the
+page says when a graph is too big to read, or too big for 3D, and expanding lets you start small. Very
+large answers (cosmos.gl draws hundreds of thousands of points) aren't worth adding for that reason.
 
 ## Testing
 

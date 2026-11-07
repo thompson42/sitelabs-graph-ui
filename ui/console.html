@@ -41,7 +41,24 @@ section { padding: 12px 16px; min-width: 0; }
 select { background: var(--panel); color: var(--text); border: 1px solid var(--line); border-radius: 4px; }
 textarea, input { font: 13px/1.4 ui-monospace, SFMono-Regular, Menlo, monospace; background: var(--panel); color: var(--text); border: 1px solid var(--line); border-radius: 6px; padding: 8px; }
 textarea { width: 100%; resize: vertical; }
-#query { min-height: 96px; }
+.editor { position: relative; }
+.editor pre, .editor textarea { display: block; width: 100%; margin: 0; padding: 8px; font: 13px/1.4 ui-monospace, SFMono-Regular, Menlo, monospace;
+  white-space: pre-wrap; overflow-wrap: break-word; border: 1px solid var(--line); border-radius: 6px; scrollbar-gutter: stable; }
+.editor pre { position: absolute; inset: 0; overflow: hidden; background: var(--panel); color: var(--text); pointer-events: none; }
+.editor textarea { position: relative; background: transparent; color: transparent; caret-color: var(--text); overflow-y: auto; min-height: 96px; }
+.editor textarea::selection { background: color-mix(in srgb, var(--accent) 30%, transparent); }
+.t-key { color: var(--accent); font-weight: 600; } .t-str { color: var(--node3); } .t-par { color: var(--node2); }
+.t-lab { color: var(--node4); } .t-com { color: var(--muted); font-style: italic; } .t-num { color: var(--node6); }
+.t-err { text-decoration: underline wavy var(--error); background: color-mix(in srgb, var(--error) 18%, transparent); }
+#complete { position: absolute; z-index: 5; left: 8px; bottom: 6px; margin: 0; padding: 2px; list-style: none; background: var(--panel); border: 1px solid var(--line);
+  border-radius: 6px; max-height: 150px; overflow: auto; font: 12px ui-monospace, SFMono-Regular, Menlo, monospace; box-shadow: 0 2px 8px rgb(0 0 0 / 20%); }
+#complete li { padding: 2px 8px; cursor: pointer; border-radius: 4px; }
+#complete li.on { background: var(--accent); color: var(--accent-text); }
+#history li { display: block; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; font: 12px ui-monospace, SFMono-Regular, Menlo, monospace; }
+#stagewrap { position: relative; }
+#inspect { position: absolute; top: 8px; right: 8px; width: min(340px, 60%); max-height: calc(100% - 16px); overflow: auto; padding: 8px; background: var(--panel);
+  border: 1px solid var(--line); border-radius: 6px; box-shadow: 0 2px 8px rgb(0 0 0 / 20%); }
+#inspect .row { margin: 0 0 6px; }
 #params { min-height: 38px; }
 .row { display: flex; gap: 8px; align-items: center; margin: 8px 0; flex-wrap: wrap; }
 button { font: inherit; border: 1px solid var(--line); background: var(--panel); color: var(--text); border-radius: 6px; padding: 6px 12px; cursor: pointer; }
@@ -63,7 +80,7 @@ pre { padding: 10px; overflow: auto; font-size: 12px; margin: 0; }
 #stage { width: 100%; height: 560px; background: var(--panel); border: 1px solid var(--line); border-radius: 6px; overflow: hidden; position: relative; }
 #legend { display: flex; flex-wrap: wrap; gap: 4px 12px; margin: 8px 0; font-size: 12px; }
 #legend i { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-right: 4px; }
-#details { white-space: pre-wrap; margin-top: 8px; }
+#details { white-space: pre-wrap; overflow-wrap: anywhere; }
 .float-tooltip-kap { background: var(--code) !important; color: var(--text) !important; }
 .muted { color: var(--muted); }
 @media (max-width: 760px) {
@@ -85,9 +102,14 @@ pre { padding: 10px; overflow: auto; font-size: 12px; margin: 0; }
     <h2>Labels</h2><ul id="labels"></ul>
     <h2 data-needs="schema">Vertex types</h2><ul id="vtypes"></ul>
     <h2>Relationship types</h2><ul id="etypes"></ul>
+    <h2>History <button id="clearhistory" hidden>Clear</button></h2><ul id="history"></ul>
   </aside>
   <section>
-    <textarea id="query" spellcheck="false" aria-label="Query">MATCH (n) RETURN labels(n)[0] AS type, count(n) AS n ORDER BY type</textarea>
+    <div class="editor">
+      <pre id="highlight" aria-hidden="true"></pre>
+      <textarea id="query" spellcheck="false" autocapitalize="off" autocomplete="off" aria-label="Query">MATCH (n) RETURN labels(n)[0] AS type, count(n) AS n ORDER BY type</textarea>
+      <ul id="complete" role="listbox" aria-label="Suggestions" hidden></ul>
+    </div>
     <textarea id="params" spellcheck="false" aria-label="Parameters" placeholder='Parameters, as JSON: {"name": "Ann"}'></textarea>
     <div class="row">
       <button class="primary" id="run" title="Ctrl+Enter">Run</button>
@@ -112,11 +134,17 @@ pre { padding: 10px; overflow: auto; font-size: 12px; margin: 0; }
           <option>100</option><option>500</option><option selected>1000</option><option>2000</option><option>5000</option><option>10000</option>
         </select> nodes</label>
         <button id="fetchall" hidden>Fetch more rows to draw</button>
+        <button id="resetgraph" hidden>Back to the answer</button>
         <span class="status" id="graphnote"></span>
       </div>
-      <div id="stage" role="img" aria-label="The nodes and relationships in the answer"></div>
+      <div id="stagewrap">
+        <div id="stage" role="img" aria-label="The nodes and relationships in the answer"></div>
+        <div id="inspect" hidden>
+          <div class="row"><button id="expand">Expand neighbours</button><button id="closeinspect">Close</button></div>
+          <pre id="details"></pre>
+        </div>
+      </div>
       <div id="legend"></div>
-      <pre id="details" hidden></pre>
     </div>
     <div class="pane" id="prof"><p class="muted">Profile a read to see its plan and every round of partition calls.</p></div>
     <div class="pane" id="raw"><pre id="rawpre"></pre></div>
@@ -131,6 +159,10 @@ let rows = [], columns = [], cursor = null, running = null;
 let current = "table", view = null, drawing = 0;        // the tab shown, the graph drawn in it, the latest draw
 let answer = null;                                      // the latest answer, for the JSON tab
 let features = {};                                      // what this server has (GET /console/config.json)
+let known = [];                                         // labels and types, for completing them
+let extra = {nodes: new Map(), rels: new Map(), done: new Set()};   // what expanding has added to the answer
+let drawn = new Map();                                  // id -> the node object the graph library holds
+const EXPAND = 100, HISTORY = 50;
 
 function store(k, v) { try { if (v === undefined) return localStorage.getItem(k); localStorage.setItem(k, v); } catch (e) { return null; } }
 $("key").value = store("graph-ui.key") || "";
@@ -161,7 +193,7 @@ function esc(s) { return String(s).replace(/[&<>"]/g, (c) => ({"&": "&amp;", "<"
 function schemaItem(name, count, q, props) {
   const li = document.createElement("li");
   li.innerHTML = `<span>${esc(name)}</span>` + (count === undefined ? "" : `<small>${count.toLocaleString()}</small>`);
-  li.onclick = () => { $("query").value = q; run(); };
+  li.onclick = () => { setQuery(q); run(); };
   const frag = document.createDocumentFragment(); frag.append(li);
   if (props && props.length) { const p = document.createElement("div"); p.className = "props";
     p.textContent = props.map((f) => `${f.name}: ${f.type}`).join(", "); frag.append(p); }
@@ -177,6 +209,7 @@ async function loadSchema() {
       $("labels").replaceChildren(...s.labels.map((l) => schemaItem(l.name, l.count, nodesQuery(l.name))));
       $("vtypes").replaceChildren(...s.vertex_types.map((t) => schemaItem(t.name, t.count, nodesQuery(t.name), t.properties)));
       $("etypes").replaceChildren(...s.edge_types.map((t) => schemaItem(t.name, t.count, relsQuery(t.name), t.properties)));
+      known = [...s.labels.map((l) => l.name), ...s.edge_types.map((t) => t.name)];
       return;
     }
     const names = async (procedure, field) => (await call("POST", "/opencypher",
@@ -185,6 +218,7 @@ async function loadSchema() {
     $("totals").textContent = "Labels and relationship types";
     $("labels").replaceChildren(...labels.map((l) => schemaItem(l, undefined, nodesQuery(l))));
     $("etypes").replaceChildren(...types.map((t) => schemaItem(t, undefined, relsQuery(t))));
+    known = [...labels, ...types];
   } catch (e) { $("totals").textContent = "The schema: " + e.message; }
 }
 
@@ -198,6 +232,9 @@ async function run(mode) {
   $("error").textContent = ""; $("more").hidden = true;
   let params; try { params = parseParams(); } catch (e) { $("error").textContent = "Parameters: " + e.message; return; }
   let query = $("query").value;
+  remember(query);
+  setError(null);
+  closeCompletion();
   if (mode === "explain") query = "EXPLAIN " + query;
   const id = "console-" + Math.random().toString(16).slice(2, 10);
   const body = {query, params, read_only: true};
@@ -209,19 +246,22 @@ async function run(mode) {
   try {
     const out = await call("POST", "/opencypher", body, {"X-Request-ID": id});
     columns = out.columns; rows = out.rows; cursor = out.cursor;
+    clearExpanded();
     const s = out.stats;
     $("status").textContent = `${(performance.now() - t0).toFixed(0)} ms` +
       (s && s.rounds !== undefined ? `, ${s.rounds} rounds, ${s.calls} calls` : "") + (cursor ? ", more rows" : `, ${rows.length} rows`);
     render(out);
     if (out.profile) { showProfile(out.profile); tab("prof"); }
-  } catch (e) { $("error").textContent = e.message; $("status").textContent = ""; }
-  finally { running = null; $("cancel").disabled = true; }
+  } catch (e) {
+    $("error").textContent = e.message; $("status").textContent = "";
+    const at = /offset (\d+)/.exec(e.message);          // a syntax error: show where
+    if (at) setError(Math.max(0, Number(at[1]) - (mode === "explain" ? "EXPLAIN ".length : 0)));
+  } finally { running = null; $("cancel").disabled = true; }
 }
 $("run").onclick = () => run();
 $("profile").onclick = () => run("profile");
 $("explain").onclick = () => run("explain");
 $("cancel").onclick = async () => { if (running) { try { await call("DELETE", "/queries/" + running); } catch (e) { $("error").textContent = e.message; } } };
-$("query").addEventListener("keydown", (e) => { if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) { e.preventDefault(); run(); } });
 $("more").onclick = async () => {
   try { const p = await call("GET", `/opencypher/cursors/${encodeURIComponent(cursor)}`); rows = rows.concat(p.rows); cursor = p.cursor; render({columns, rows}); }
   catch (e) { $("error").textContent = e.message; }
@@ -276,8 +316,7 @@ function hasWebGL() {
   try { const c = document.createElement("canvas"); return !!(c.getContext("webgl2") || c.getContext("webgl")); }
   catch (e) { return false; }
 }
-function collect(cap) {
-  const nodes = new Map(), rels = new Map();
+function gather(value, nodes, rels) {
   const walk = (v) => {
     if (!v || typeof v !== "object") return;
     if (Array.isArray(v)) { v.forEach(walk); return; }
@@ -286,15 +325,22 @@ function collect(cap) {
     else if (v.nodes && v.relationships) { v.nodes.forEach(walk); v.relationships.forEach(walk); }
     else Object.values(v).forEach(walk);
   };
-  rows.forEach((r) => Object.values(r).forEach(walk));
+  walk(value);
+}
+function collect(cap) {
+  const nodes = new Map(), rels = new Map(extra.rels);
+  rows.forEach((r) => gather(r, nodes, rels));
+  for (const [id, n] of extra.nodes) nodes.set(id, n);
   // a relationship's ends that the answer didn't return are drawn as placeholders
   const total = new Set(nodes.keys());
   let missing = 0;
   for (const r of rels.values()) for (const end of [r.start, r.end]) if (!total.has(end)) { total.add(end); missing++; }
-  const kept = new Map();
-  for (const n of nodes.values()) { if (kept.size >= cap) break; kept.set(n.id, n); }
+  // what expanding added is always drawn: it was asked for by hand
+  const kept = new Map(), limit = cap + extra.nodes.size;
+  for (const id of extra.nodes.keys()) kept.set(id, nodes.get(id));
+  for (const n of nodes.values()) { if (kept.size >= limit) break; kept.set(n.id, n); }
   for (const r of rels.values()) for (const end of [r.start, r.end]) {
-    if (kept.size >= cap) break;
+    if (kept.size >= limit) break;
     if (!kept.has(end)) kept.set(end, null);
   }
   const links = [...rels.values()].filter((r) => kept.has(r.start) && kept.has(r.end));
@@ -307,64 +353,45 @@ function tokens() {
 }
 function closeView() {
   if (view) { try { view._destructor(); } catch (e) { /* it may never have started */ } view = null; }
+  drawn = new Map();
   $("stage").replaceChildren();
+  $("inspect").hidden = true;
+}
+function clearExpanded() {
+  extra = {nodes: new Map(), rels: new Map(), done: new Set()};
+  $("resetgraph").hidden = true;
 }
 function title(n) {
   if (!n.data) return "(not in the answer) " + n.id;
   const p = n.data.properties;
   return `${n.data.labels.join(":")} ${p.name ?? p.title ?? ""}`.trim();
 }
+let inspected = null, layoutFrom = 0, expandNote = "";
 function showDetails(n) {
-  const d = $("details");
-  d.hidden = false;
-  d.textContent = JSON.stringify(n.data || {id: n.id, note: "A relationship's end that the answer didn't return"}, null, 2);
+  inspected = n;
+  $("inspect").hidden = false;
+  $("details").textContent = JSON.stringify(n.data || {id: n.id, note: "A relationship's end that the answer didn't return"}, null, 2);
+  $("expand").disabled = extra.done.has(n.id);
+  $("expand").textContent = extra.done.has(n.id) ? "Expanded" : "Expand neighbours";
 }
-async function draw(kind) {
-  const me = ++drawing;                                 // a later draw replaces this one
-  closeView();
-  delete $("stage").dataset.laidOut;
-  const cap = Number($("cap").value), {kept, links, totalNodes, totalRels, missing} = collect(cap);
-  $("details").hidden = true;
-  $("legend").replaceChildren();
-  $("fetchall").hidden = !cursor || rows.length >= cap * 10;
-  if (!kept.size) { $("graphnote").textContent = "No nodes in the answer: return nodes, relationships or paths to see them here."; return; }
-  if (kind === "g3d" && !hasWebGL()) { $("graphnote").textContent = "This browser has no WebGL, which 3D needs: use 2D."; return; }
-  const theme = tokens(), colours = new Map();
+// the graph's data as the library takes it: a node keeps its object, and so its place, between updates
+function graphData(near) {
+  const cap = Number($("cap").value), found = collect(cap), theme = tokens(), colours = new Map(), next = new Map();
   const colour = (label) => { if (!colours.has(label)) colours.set(label, theme.nodes[colours.size % theme.nodes.length]); return colours.get(label); };
-  const data = {
-    nodes: [...kept].map(([id, n]) => ({id, data: n, color: n ? colour(n.labels[0] || "") : theme.muted})),
-    links: links.map((r) => ({source: r.start, target: r.end, type: r.type})),
-  };
-  const n = data.nodes.length, big = n > 1000;
-  $("graphnote").textContent = "Loading the graph library…";
-  let Graph;
-  try { Graph = await library(kind); }
-  catch (e) { $("graphnote").textContent = e.message; return; }
-  if (me !== drawing || current !== kind) return;      // the tab or the answer changed while it loaded
-  const stage = $("stage"), t0 = performance.now();
-  // measured (README.md#how-big-a-graph): past these, the picture stops saying anything
-  const advice = kind === "g3d" && n > 2000 ? " 3D is slow at this size: try 2D, or narrow the query." :
-    n > 500 ? " A graph this size is hard to read: narrow the query (labels, properties, LIMIT)." : "";
-  const say = (extra) => {
-    $("graphnote").textContent = `${n} of ${totalNodes} nodes, ${links.length} of ${totalRels} relationships` +
-      (missing ? `, ${missing} ends not in the answer` : "") + (cursor ? ", more rows not fetched" : "") +
-      (extra ? `. ${extra}` : "") + advice;
-  };
-  say("Laying it out…");
-  view = new Graph(stage).width(stage.clientWidth).height(stage.clientHeight)
-    .backgroundColor(theme.panel).nodeId("id").nodeColor("color").nodeVal(1)
-    .nodeLabel((x) => esc(title(x))).linkLabel((x) => esc(x.type)).linkColor(() => theme.edge)
-    .linkDirectionalArrowLength(big ? 0 : 3).linkDirectionalArrowRelPos(1)
-    .cooldownTicks(big ? 120 : 300).onNodeClick(showDetails);
-  if (kind === "g3d") view.showNavInfo(false).nodeResolution(big ? 4 : 8).linkOpacity(big ? 0.25 : 0.5);
-  const drawn = view;
-  view.onEngineStop(() => {
-    if (view !== drawn) return;
-    stage.dataset.laidOut = ((performance.now() - t0) / 1000).toFixed(2);
-    say(`Laid out in ${stage.dataset.laidOut} s`);
-    view.zoomToFit(400, 30);
-  });
-  view.graphData(data);
+  for (const [id, n] of found.kept) {
+    const o = drawn.get(id) || {id};
+    if (near && o.x === undefined) {                    // beside the node it was expanded from
+      const spread = () => (Math.random() - 0.5) * 30;
+      o.x = near.x + spread(); o.y = near.y + spread(); if (near.z !== undefined) o.z = near.z + spread();
+    }
+    o.data = n; o.color = n ? colour(n.labels[0] || "") : theme.muted; o.expanded = extra.done.has(id);
+    next.set(id, o);
+  }
+  drawn = next;
+  return {found, colours, data: {nodes: [...next.values()], links: found.links.map((r) => ({source: r.start, target: r.end, type: r.type}))}};
+}
+function legend(colours) {
+  $("legend").replaceChildren();
   for (const [label, c] of colours) {
     const item = document.createElement("span"), dot = document.createElement("i");
     dot.style.background = c;
@@ -372,6 +399,80 @@ async function draw(kind) {
     $("legend").append(item);
   }
 }
+function describe(kind, found, extraText) {
+  const n = found.kept.size;
+  // measured (README.md#how-big-a-graph): past these, the picture stops saying anything
+  const advice = kind === "g3d" && n > 2000 ? " 3D is slow at this size: try 2D, or narrow the query." :
+    n > 500 ? " A graph this size is hard to read: narrow the query (labels, properties, LIMIT)." : "";
+  $("graphnote").textContent = `${n} of ${found.totalNodes} nodes, ${found.links.length} of ${found.totalRels} relationships` +
+    (found.missing ? `, ${found.missing} ends not in the answer` : "") + (cursor ? ", more rows not fetched" : "") +
+    (extra.done.size ? `, ${extra.done.size} expanded` : "") + (extraText ? `. ${extraText}` : "") + advice;
+}
+async function draw(kind) {
+  const me = ++drawing;                                 // a later draw replaces this one
+  closeView();
+  const stage = $("stage");
+  delete stage.dataset.laidOut;
+  const {found, colours, data} = graphData();
+  $("legend").replaceChildren();
+  $("fetchall").hidden = !cursor || rows.length >= Number($("cap").value) * 10;
+  if (!data.nodes.length) { $("graphnote").textContent = "No nodes in the answer: return nodes, relationships or paths to see them here."; return; }
+  if (kind === "g3d" && !hasWebGL()) { $("graphnote").textContent = "This browser has no WebGL, which 3D needs: use 2D."; return; }
+  const n = data.nodes.length, big = n > 1000;
+  $("graphnote").textContent = "Loading the graph library…";
+  let Graph;
+  try { Graph = await library(kind); }
+  catch (e) { $("graphnote").textContent = e.message; return; }
+  if (me !== drawing || current !== kind) return;      // the tab or the answer changed while it loaded
+  const theme = tokens();
+  layoutFrom = performance.now(); expandNote = "";
+  describe(kind, found, "Laying it out…");
+  view = new Graph(stage).width(stage.clientWidth).height(stage.clientHeight)
+    .backgroundColor(theme.panel).nodeId("id").nodeColor("color").nodeVal((x) => (x.expanded ? 3 : 1))
+    .nodeLabel((x) => esc(title(x))).linkLabel((x) => esc(x.type)).linkColor(() => theme.edge)
+    .linkDirectionalArrowLength(big ? 0 : 3).linkDirectionalArrowRelPos(1)
+    .cooldownTicks(big ? 120 : 300).onNodeClick(showDetails);
+  if (kind === "g3d") view.showNavInfo(false).nodeResolution(big ? 4 : 8).linkOpacity(big ? 0.25 : 0.5);
+  const started = view;
+  view.onEngineStop(() => {
+    if (view !== started) return;
+    stage.dataset.laidOut = ((performance.now() - layoutFrom) / 1000).toFixed(2);
+    describe(kind, collect(Number($("cap").value)), expandNote || `Laid out in ${stage.dataset.laidOut} s`);
+    view.zoomToFit(400, 30);
+  });
+  view.graphData(data);
+  legend(colours);
+}
+async function expand() {
+  const n = inspected;
+  if (!n || !view || extra.done.has(n.id)) return;
+  $("expand").disabled = true; $("expand").textContent = "Expanding…";
+  $("error").textContent = "";
+  const kind = current, had = view;
+  try {
+    const out = await call("POST", "/opencypher", {read_only: true, params: {id: n.id},
+      query: `MATCH (a)-[r]-(b) WHERE id(a) = $id RETURN a, r, b LIMIT ${EXPAND}`});
+    if (view !== had) return;                           // another answer or tab meanwhile
+    out.rows.forEach((r) => gather(r, extra.nodes, extra.rels));
+    extra.done.add(n.id);
+    $("resetgraph").hidden = false;
+    delete $("stage").dataset.laidOut;
+    const {found, colours, data} = graphData(n);
+    layoutFrom = performance.now();
+    expandNote = !out.rows.length ? "It has no neighbours" :
+      out.rows.length >= EXPAND ? `Showing its first ${EXPAND} relationships` : "";
+    view.graphData(data);
+    legend(colours);
+    describe(kind, found, expandNote);
+    showDetails(drawn.get(n.id) || n);
+  } catch (e) {
+    $("error").textContent = e.message;
+    $("expand").disabled = false; $("expand").textContent = "Expand neighbours";
+  }
+}
+$("expand").onclick = expand;
+$("closeinspect").onclick = () => { $("inspect").hidden = true; };
+$("resetgraph").onclick = () => { clearExpanded(); draw(current); };
 $("cap").onchange = () => { if (current === "g3d" || current === "g2d") draw(current); };
 $("fetchall").onclick = async () => {
   const cap = Number($("cap").value);
@@ -396,6 +497,116 @@ function tab(name) {
   if (name === "raw") showJson();
 }
 document.querySelectorAll(".tabs button").forEach((b) => (b.onclick = () => tab(b.dataset.pane)));
+// -- the query box: highlighting under a transparent textarea, completion, and history -------- //
+const KEYWORDS = ["MATCH", "OPTIONAL", "WHERE", "RETURN", "WITH", "ORDER", "BY", "LIMIT", "SKIP", "UNWIND", "CALL", "YIELD",
+  "DISTINCT", "AS", "AND", "OR", "XOR", "NOT", "IN", "IS", "NULL", "ASC", "DESC", "UNION", "ALL", "CASE", "WHEN", "THEN", "ELSE",
+  "END", "EXISTS", "STARTS", "ENDS", "CONTAINS", "TRUE", "FALSE", "EXPLAIN", "PROFILE", "CREATE", "MERGE", "SET", "DELETE",
+  "DETACH", "REMOVE"];
+const WORDS = new Set(KEYWORDS);
+const TOKEN = /\/\/[^\n]*|'(?:[^'\\]|\\.)*'?|"(?:[^"\\]|\\.)*"?|`[^`]*`?|\$\w+|:\s*`?[A-Za-z_]\w*`?|\b\d+(?:\.\d+)?\b|\b[A-Za-z_]\w*\b/g;
+let errorAt = null;
+function tokenClass(t) {
+  if (t.startsWith("//")) return "t-com";
+  if (t[0] === "'" || t[0] === '"') return "t-str";
+  if (t[0] === "$") return "t-par";
+  if (t[0] === ":" || t[0] === "`") return "t-lab";
+  if (/^\d/.test(t)) return "t-num";
+  return WORDS.has(t.toUpperCase()) ? "t-key" : "";
+}
+function highlight() {
+  const text = $("query").value;
+  let html = "", at = 0;
+  const piece = (from, to, cls) => {
+    if (from >= to) return;
+    const bad = errorAt !== null && errorAt >= from && errorAt < to;
+    const classes = [cls, bad ? "t-err" : ""].filter(Boolean).join(" ");
+    html += classes ? `<span class="${classes}">${esc(text.slice(from, to))}</span>` : esc(text.slice(from, to));
+  };
+  for (const m of text.matchAll(TOKEN)) {
+    piece(at, m.index, "");
+    piece(m.index, m.index + m[0].length, tokenClass(m[0]));
+    at = m.index + m[0].length;
+  }
+  piece(at, text.length, "");
+  if (errorAt !== null && errorAt >= text.length) html += '<span class="t-err"> </span>';
+  $("highlight").innerHTML = html + "\n";
+  syncScroll();
+}
+function syncScroll() { $("highlight").scrollTop = $("query").scrollTop; }
+function setError(offset) { errorAt = offset; highlight(); }
+function setQuery(q) { $("query").value = q; errorAt = null; closeCompletion(); highlight(); }
+function closeCompletion() { $("complete").hidden = true; $("complete").replaceChildren(); }
+function completions() {
+  const q = $("query"), before = q.value.slice(0, q.selectionStart);
+  const m = /(:\s*`?)?([A-Za-z_]\w*)$/.exec(before);
+  if (!m || (!m[1] && m[2].length < 2)) return null;
+  const word = m[2].toLowerCase(), pool = m[1] ? known : KEYWORDS;
+  const hits = pool.filter((x) => x.toLowerCase().startsWith(word) && x.toLowerCase() !== word).slice(0, 8);
+  return hits.length ? {hits, from: q.selectionStart - m[2].length} : null;
+}
+let completing = null, tabLeaves = false;
+function showCompletion() {
+  completing = completions();
+  if (!completing) { closeCompletion(); return; }
+  $("complete").replaceChildren(...completing.hits.map((hit, i) => {
+    const li = document.createElement("li");
+    li.textContent = hit; li.setAttribute("role", "option"); li.className = i ? "" : "on";
+    li.onmousedown = (e) => { e.preventDefault(); accept(hit); };
+    return li;
+  }));
+  $("complete").hidden = false;
+}
+function accept(hit) {
+  const q = $("query"), end = q.selectionStart;
+  q.setRangeText(hit, completing.from, end, "end");
+  closeCompletion();
+  highlight();
+}
+function moveCompletion(by) {
+  const items = [...$("complete").children], at = items.findIndex((x) => x.classList.contains("on"));
+  items[at].classList.remove("on");
+  const next = items[(at + by + items.length) % items.length];
+  next.classList.add("on"); next.scrollIntoView({block: "nearest"});
+}
+$("query").addEventListener("input", () => { errorAt = null; tabLeaves = false; highlight(); showCompletion(); });
+$("query").addEventListener("scroll", syncScroll);
+$("query").addEventListener("blur", closeCompletion);
+new ResizeObserver(syncScroll).observe($("query"));
+$("query").addEventListener("keydown", (e) => {
+  if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) { e.preventDefault(); run(); return; }
+  const open = !$("complete").hidden;
+  if (open && e.key === "ArrowDown") { e.preventDefault(); moveCompletion(1); }
+  else if (open && e.key === "ArrowUp") { e.preventDefault(); moveCompletion(-1); }
+  else if (open && (e.key === "Tab" || e.key === "Enter")) { e.preventDefault(); accept($("complete").querySelector(".on").textContent); }
+  else if (e.key === "Escape") { closeCompletion(); tabLeaves = true; }   // then Tab leaves the box
+  else if (e.key === "Tab" && !e.shiftKey && !tabLeaves) {
+    e.preventDefault();
+    $("query").setRangeText("  ", $("query").selectionStart, $("query").selectionEnd, "end");
+    highlight();
+  }
+});
+// the last queries in this browser: their text only, not their parameters, which may be private
+function history() { try { return JSON.parse(store("graph-ui.history") || "[]"); } catch (e) { return []; } }
+function showHistory() {
+  const items = history();
+  $("clearhistory").hidden = !items.length;
+  $("history").replaceChildren(...items.map((q) => {
+    const li = document.createElement("li");
+    li.textContent = q; li.title = q;
+    li.onclick = () => { setQuery(q); $("query").focus(); };
+    return li;
+  }));
+}
+function remember(q) {
+  q = q.trim();
+  if (!q) return;
+  store("graph-ui.history", JSON.stringify([q, ...history().filter((x) => x !== q)].slice(0, HISTORY)));
+  showHistory();
+}
+$("clearhistory").onclick = () => { store("graph-ui.history", "[]"); showHistory(); };
+highlight();
+showHistory();
+
 async function start() {
   try {
     const r = await fetch("/console/config.json");

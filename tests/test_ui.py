@@ -77,6 +77,13 @@ class Backend(http.server.BaseHTTPRequestHandler):
             return self.answer({"columns": ["relationshipType"], "rows": [{"relationshipType": "KNOWS"}], "stats": {}})
         if q.startswith("CREATE"):
             return self.answer({"error": "read-only"}, 400)
+        if "$id" in q:
+            near = {"id": "b", "labels": ["Person"], "properties": {"name": "Bob"}}
+            return self.answer({"columns": ["a", "r", "b"], "rows": [{"a": NODE, "r": REL, "b": near}], "stats": {}})
+        if q.startswith("ONE"):
+            return self.answer({"columns": ["a"], "rows": [{"a": NODE}], "stats": {}})
+        if q.startswith("BAD"):
+            return self.answer({"error": "OpenCypherSyntaxError: expected ')' (near 'x', offset 4)"}, 400)
         self.answer({"columns": ["a", "r"], "rows": [{"a": NODE, "r": REL}], "stats": {}})
 
 
@@ -142,7 +149,7 @@ def test_the_page_shows_what_the_server_has(browser, config):
         assert page.is_visible("#labels li small") == config["schema"]
         page.click("#run")
         until(page, "document.querySelector('#table td')")
-        sent = handler.seen[-1]
+        sent = next(x for x in reversed(handler.seen) if "db." not in x["query"])
         assert sent["read_only"] is True and ("page_size" in sent) == config["pages"] and "profile" not in sent
         for kind in ("g2d", "g3d"):
             page.click(f".tabs button[data-pane={kind}]")
@@ -155,3 +162,113 @@ def test_the_page_shows_what_the_server_has(browser, config):
     finally:
         page.close()
         server.shutdown()
+
+
+@pytest.fixture
+def page(browser):
+    server, handler = serve(FULL)
+    p = browser.new_page(viewport={"width": 1200, "height": 900})
+    p.problems = []
+    p.on("pageerror", lambda e: p.problems.append(str(e)))
+    p.handler = handler
+    p.goto(f"http://127.0.0.1:{server.server_address[1]}/console")
+    until(p, "document.querySelector('#labels li')")
+    yield p
+    p.close()
+    server.shutdown()
+
+
+def run(p, query):
+    p.fill("#query", query)
+    p.click("#run")
+    until(p, "document.getElementById('cancel').disabled")
+
+
+@pytest.mark.parametrize("kind", ["g2d", "g3d"])
+def test_expanding_a_node_adds_its_neighbours(page, kind):
+    run(page, "ONE")
+    page.click(f".tabs button[data-pane={kind}]")
+    until(page, "document.getElementById('stage').dataset.laidOut")
+    assert "1 of 1 nodes" in page.inner_text("#graphnote")
+    page.wait_for_timeout(700)
+    box = page.locator("#stage").bounding_box()
+    page.mouse.move(box["x"] + box["width"] / 2, box["y"] + box["height"] / 2)
+    page.wait_for_timeout(400)                                           # picking happens on a drawn frame
+    page.mouse.down()
+    page.mouse.up()
+    until(page, "!document.getElementById('inspect').hidden", 20)
+    assert "Ann" in page.inner_text("#details")
+    page.click("#expand")
+    until(page, "document.getElementById('graphnote').textContent.includes('2 of 2 nodes')")
+    sent = page.handler.seen[-1]
+    assert sent["read_only"] is True and sent["params"] == {"id": "a"} and "1 expanded" in page.inner_text("#graphnote")
+    assert page.is_disabled("#expand") and page.is_visible("#resetgraph")
+    other = "g3d" if kind == "g2d" else "g2d"
+    page.click(f".tabs button[data-pane={other}]")                       # it carries over to the other view
+    until(page, "document.getElementById('stage').dataset.laidOut")
+    assert "2 of 2 nodes" in page.inner_text("#graphnote")
+    page.click("#resetgraph")
+    until(page, "document.getElementById('stage').dataset.laidOut")
+    assert "1 of 1 nodes" in page.inner_text("#graphnote") and not page.is_visible("#resetgraph")
+    assert page.problems == []
+
+
+def test_a_new_answer_forgets_what_was_expanded(page):
+    run(page, "ONE")
+    page.evaluate("extra.done.add('a'); extra.nodes.set('z', {id: 'z', labels: ['X'], properties: {}})")
+    run(page, "ONE")
+    assert page.evaluate("extra.nodes.size") == 0 and page.evaluate("extra.done.size") == 0
+
+
+def test_the_box_highlights_and_shows_where_a_syntax_error_is(page):
+    run(page, "MATCH (p:Person {name: $n}) RETURN p.name // who\nLIMIT 3")
+    html = page.inner_html("#highlight")
+    for mark in ('t-key">MATCH', 't-lab">:Person', 't-par">$n', 't-com">// who', 't-num">3'):
+        assert mark in html, mark
+    assert page.evaluate("document.getElementById('highlight').textContent.trimEnd()") == page.input_value("#query")
+    page.fill("#query", "<img src=x onerror=window.__xss=1>")
+    assert page.locator("#highlight img").count() == 0 and page.evaluate("window.__xss") is None
+    run(page, "BAD x y")
+    assert 't-err">' in page.inner_html("#highlight") and "offset 4" in page.inner_text("#error")
+    page.locator("#query").press("End")
+    page.locator("#query").type("z")
+    assert "t-err" not in page.inner_html("#highlight")                  # typing clears it
+
+
+def test_completing_labels_and_keywords(page):
+    q = page.locator("#query")
+    page.fill("#query", "")
+    q.type("MATCH (n:Per")
+    assert page.inner_text("#complete").strip() == "Person"
+    q.press("Tab")
+    assert page.input_value("#query") == "MATCH (n:Person" and not page.is_visible("#complete")
+    q.type(") RET")
+    assert "RETURN" in page.inner_text("#complete")
+    q.press("Enter")
+    assert page.input_value("#query") == "MATCH (n:Person) RETURN"
+    q.type(" LI")
+    assert page.is_visible("#complete")
+    q.press("Escape")
+    assert not page.is_visible("#complete")
+    page.fill("#query", "")
+    q.press("Tab")
+    assert page.input_value("#query") == "  "                            # Tab indents...
+    q.press("Escape")
+    q.press("Tab")
+    assert page.evaluate("document.activeElement.id") != "query"         # ...and Escape, Tab leaves the box
+
+
+def test_history_keeps_the_last_queries_not_their_parameters(page):
+    page.fill("#params", '{"secret": "hunter2"}')
+    for q in ("ONE", "ONE two", "ONE"):
+        run(page, q)
+    items = page.locator("#history li").all_inner_texts()
+    assert items == ["ONE", "ONE two"]                                   # newest first, no repeats
+    assert "hunter2" not in page.evaluate("localStorage.getItem('graph-ui.history')")
+    page.locator("#history li").nth(1).click()
+    assert page.input_value("#query") == "ONE two"
+    page.reload()
+    until(page, "document.querySelector('#labels li')")
+    assert page.locator("#history li").count() == 2                      # it survives a reload
+    page.click("#clearhistory")
+    assert page.locator("#history li").count() == 0 and not page.is_visible("#clearhistory")
